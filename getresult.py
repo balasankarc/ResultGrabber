@@ -300,12 +300,14 @@ class ResultGrabber(object):
                             self.registers[college][branch].append(register)
                         if subject not in self.subjects[branch]:
                             self.subjects[branch].append(subject)
-                        if register not in self.result_register[college][branch]:
+                        if register not in self.result_register[
+                                college][branch]:
                             self.result_register[college][
                                 branch][register] = {}
                         self.result_register[college][
                             branch][register]["name"] = name
-                        if subject not in self.result_register[college][branch][register]:
+                        if subject not in self.result_register[
+                                college][branch][register]:
                             self.result_register[college][
                                 branch][register][subject] = {}
                         self.result_register[college][branch][register][subject] = \
