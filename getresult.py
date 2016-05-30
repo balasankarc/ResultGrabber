@@ -85,7 +85,7 @@ def download(url, examcode, start, end):
 def process(start, end):
     '''This method processes the specified results and populate necessary data
     structures.'''
-    global result, exam
+    global result, exam, result1
     badresult = []
     for count in range(start, end + 1):
         try:
@@ -114,10 +114,13 @@ def process(start, end):
                     branch = i[0][branchpos:namepos][9:].strip().title()
                     exam = i[0][exampos:][11:].strip().title()
                     register = i[0][registerpos:exampos][13:].strip()
+                    name = i[0][namepos:registerpos][7:].strip()
                     if college not in result:
                         result[college] = {}
+                        result1[college] = {}
                     if branch not in result[college]:
                         result[college][branch] = {}
+                        result1[college][branch] = {}
                 elif 'Mahatma' in i[0]:
                     pass
                 elif 'Sl. No' in i[0]:
@@ -137,10 +140,19 @@ def process(start, end):
                     else:
                         external = int(external)
                     res = i[5]
-                    if subject not in result[college][branch]:
-                        result[college][branch][subject] = {}
-                    result[college][branch][subject][register] = \
+                    if subject not in result1[college][branch]:
+                        result1[college][branch][subject] = {}
+                    if register not in result[college][branch]:
+                        result[college][branch][register] = {}
+                    result[college][branch][register]["name"] = name
+                    if register not in result1[college][branch][subject]:
+                        result1[college][branch][subject][register] = {}
+                    if subject not in result[college][branch][register]:
+                        result[college][branch][register][subject] = {}
+                    result1[college][branch][subject][register] = \
                         [external, res]
+                    result[college][branch][register][subject] = \
+                        [internal, external, internal + external, res]
         except:
             badresult.append(count)
             continue
@@ -148,7 +160,7 @@ def process(start, end):
         print "\nUnavailable Results Skipped"
         for invalid in badresult:
             print "Roll Number #", invalid
-    jsonout = json.dumps(result)
+    jsonout = json.dumps(result, indent=4)
     outfile = open('output.json', 'w')
     outfile.write(jsonout)
     outfile.close()
@@ -158,7 +170,7 @@ def process(start, end):
 def generatepdf():
     '''This method generates summary pdf from the results of result processor.
     '''
-    global result
+    global result1
     global exam
 
     doc = SimpleDocTemplate("report.pdf", pagesize=A4,
@@ -172,31 +184,32 @@ def generatepdf():
     styles.add(ParagraphStyle(name='Center2', alignment=1, fontSize=13))
     styles.add(ParagraphStyle(name='Normal2', bulletIndent=20))
     styles.add(ParagraphStyle(name='Normal3', fontSize=12))
-    for college in result:
-        for branch in result[college]:
+    for college in result1:
+        for branch in result1[college]:
             # PDF Generation begins
             Story.append(Paragraph(college, styles["Center1"]))
             Story.append(Spacer(1, 0.25 * inch))
             Story.append(Paragraph(exam, styles["Center2"]))
             Story.append(Spacer(1, 12))
-            numberofstudents = len(result[college][branch].itervalues().next())
+            numberofstudents = len(
+                result1[college][branch].itervalues().next())
             Story.append(Paragraph(branch, styles["Center2"]))
             Story.append(Spacer(1, 0.25 * inch))
             Story.append(Paragraph("Total Number of Students : %d" %
                                    numberofstudents, styles["Normal2"]))
             Story.append(Spacer(1, 12))
-            for subject in result[college][branch]:
-                marklist = [int(result[college][branch][subject][x][0])
-                            for x in result[college][branch][subject]]
+            for subject in result1[college][branch]:
+                marklist = [int(result1[college][branch][subject][x][0])
+                            for x in result1[college][branch][subject]]
                 average = statistics.mean(marklist)  # Calculating mean
                 # Calculating standard deviation
                 stdev = statistics.pstdev(marklist)
-                passlist = {x for x in result[college][branch][
-                    subject] if 'P' in result[college][branch][subject][x]}
-                faillist = {x for x in result[college][branch][
-                    subject] if 'F' in result[college][branch][subject][x]}
-                absentlist = {x for x in result[college][branch][
-                    subject] if 'AB' in result[college][branch][subject][x]}
+                passlist = {x for x in result1[college][branch][
+                    subject] if 'P' in result1[college][branch][subject][x]}
+                faillist = {x for x in result1[college][branch][
+                    subject] if 'F' in result1[college][branch][subject][x]}
+                absentlist = {x for x in result1[college][branch][
+                    subject] if 'AB' in result1[college][branch][subject][x]}
                 passcount = len(passlist)
                 failcount = len(faillist)
                 absentcount = len(absentlist)
