@@ -207,6 +207,10 @@ class ResultGrabber(object):
         end = int(end)
         verbosity = 1
         try:
+            os.mkdir('Results')
+        except:
+            pass
+        try:
             for count in range(start, end + 1):
                 if verbosity == 1:
                     print "Roll Number #", count
@@ -218,7 +222,7 @@ class ResultGrabber(object):
                 payload = dict(exam=examcode, prn=count, Submit2='Submit')
                 r = requests.post(self.url, payload)
                 if r.status_code == 200:
-                    with open('result' + str(count) + '.pdf', 'wb') as \
+                    with open('Results/result' + str(count) + '.pdf', 'wb') as\
                             resultfile:
                         for chunk in r.iter_content():
                             resultfile.write(chunk)
@@ -332,7 +336,7 @@ class ResultGrabber(object):
         '''
         This method generates summary pdf from the results of result processor.
         '''
-        doc = SimpleDocTemplate("report.pdf", pagesize=A4,
+        doc = SimpleDocTemplate("Report.pdf", pagesize=A4,
                                 rightMargin=72, leftMargin=72,
                                 topMargin=50, bottomMargin=30)
         Story = []
