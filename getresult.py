@@ -15,13 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import argparse
 import json
+import os
 import statistics
 import sys
 import textwrap
-from argparse import RawTextHelpFormatter as rt
-import os
 import time
 
 import requests
@@ -38,14 +36,23 @@ import pdftableextract as pdf
 
 
 class GUI(QWidget):
+    '''
+    Class to generate GUI for ResultGrabber.
+    '''
 
     def __init__(self):
+        '''
+        Initialize grabber and UI.
+        '''
         super(GUI, self).__init__()
         self.grabber = None
         self.initSplash()
         self.initUI()
 
     def initSplash(self):
+        '''
+        Show splash screen.
+        '''
         splash_pix = QPixmap('myImage.jpg')
         splash = QSplashScreen(splash_pix, Qt.WindowStaysOnTopHint)
         splash.setMask(splash_pix.mask())
@@ -55,7 +62,9 @@ class GUI(QWidget):
         splash.finish(self)
 
     def initUI(self):
-
+        '''
+        Create UI widgets.
+        '''
         self.setGeometry(0, 0, 300, 300)
         self.setWindowTitle('ResultGrabber')
 
@@ -107,6 +116,9 @@ class GUI(QWidget):
         self.show()
 
     def comboClicked(self):
+        '''
+        Handle Combobox's selection change.
+        '''
         if self.cbox.currentText() == "Select Examination":
             self.csvButton.setEnabled(False)
             self.pdfButton.setEnabled(False)
@@ -121,6 +133,9 @@ class GUI(QWidget):
             self.endText.setEnabled(True)
 
     def downloadClicked(self):
+        '''
+        Handle clicking of download button.
+        '''
         start = int(self.startText.text())
         end = int(self.endText.text())
         self.grabber.exam_name = self.cbox.currentText()
@@ -135,6 +150,9 @@ class GUI(QWidget):
         self.pdfButton.setEnabled(True)
 
     def textChanged(self):
+        '''
+        Validate register numbers.
+        '''
         if self.startText.text() != "" and self.endText.text() != "":
             if self.startText.text().isdigit() and \
                     self.endText.text().isdigit():
@@ -157,6 +175,9 @@ class GUI(QWidget):
             self.downloadButton.setEnabled(False)
 
     def csvClicked(self):
+        '''
+        Handle CSV creation button click.
+        '''
         try:
             os.mkdir('CSVs')
         except:
@@ -166,14 +187,23 @@ class GUI(QWidget):
         print "Generated CSVs"
 
     def pdfClicked(self):
+        '''
+        Handle PDF creation button click.
+        '''
         print "Generating Report"
         self.grabber.generatepdf()
         print "Report generated"
 
 
 class ResultGrabber(object):
+    '''
+    ResultGrabber class.
+    '''
 
     def __init__(self):
+        '''
+        Initialize necessary metadata.
+        '''
         self.result_subject = {}
         self.result_register = {}
         self.url = 'http://projects.mgu.ac.in/bTech/btechresult/index.php?\
@@ -236,8 +266,10 @@ class ResultGrabber(object):
             print(exc_type, fname, exc_tb.tb_lineno)
 
     def process(self, start, end):
-        '''This method processes the specified results and populate necessary data
-        structures.'''
+        '''
+        This method processes the specified results and populate necessary data
+        structures.
+        '''
         self.badresult = []
         self.registers = {}
         self.subjects = {}
@@ -410,7 +442,10 @@ class ResultGrabber(object):
         doc.build(Story)
 
     def getsummary():
-        ''' This method generates overall average and standard deviation'''
+        '''
+        This method generates overall average and standard deviation for each
+        department in each college.
+        '''
         infile = open('output.json', 'r')
         filecontent = infile.read()
         infile.close()
@@ -451,6 +486,9 @@ class ResultGrabber(object):
                     % final[department][subject][1]
 
     def tocsv(self):
+        '''
+        Generate CSV files for each branch in each college.
+        '''
         f = open('output_register.json')
         content = f.read()
         jsonout = json.loads(content)
@@ -482,63 +520,11 @@ class ResultGrabber(object):
                 csvout.write(outputstring)
                 csvout.close()
 
-    if __name__ == '__main__':
-        # Defining commandline options
-        parser = argparse.ArgumentParser(
-            description='Download and Generate Result Summaries',
-            formatter_class=rt, add_help=False)
-        parser.add_argument(
-            "-h", "--help", help="\t\tShow this help and exit",
-            action="store_true")
-        parser.add_argument(
-            "-l", "--list", help="\t\tList exam codes", action="store_true")
-        parser.add_argument(
-            "-d", "--download", help="\t\tDownload results", nargs=3,
-            metavar=('START', 'END', 'EXAM'))
-        parser.add_argument(
-            "-p", "--process", help="\t\tDownload results", nargs=2,
-            metavar=('START', 'END'))
-        parser.add_argument(
-            "-v", "--verbose", help="Enable Verbosity", action="store_true")
-        args = parser.parse_args()
-
-        verbosity = 0
-        if args.help:
-            print ""
-            print "usage: getresult.py [-h] [-l LIST] [--download START END EXAM] \
-                    [--process START END]"
-            print "Download and Generate Result Summaries"
-            print "\noptional arguments:"
-            print "   -h/--help\t\t\t\tshow this help message and exit"
-            print "   -v/--verbose\t\t\t\tEnable verbosity"
-            print "   -l/--list\t\t\t\tList exam codes"
-            print "   -d/--download START END EXAM\t\tDownload results"
-            print "   -p/--process START END\t\tProcess results"
-            sys.exit(0)
-        if args.verbose:
-            verbosity = 1
-        if args.list:
-            getexamlist(url)
-        if args.download:
-            start = int(args.download[0])
-            end = int(args.download[1])
-            exam = int(args.download[2])
-            print "Downloading Results"
-            download(url, exam, start, end)
-        if args.process:
-            start = int(args.process[0])
-            end = int(args.process[1])
-            result = {}
-            subjects = []
-            register = []
-            print "Processing Results"
-            subjects, registers = process(start, end)
-            tocsv(subjects, registers)
-            # generatepdf()
-            # getsummary()
-
 
 def main():
+    '''
+    Initialize the GUI and initiate it.
+    '''
     app = QApplication(sys.argv)
     ex = GUI()
     sys.exit(app.exec_())
