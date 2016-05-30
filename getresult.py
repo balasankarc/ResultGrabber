@@ -76,6 +76,7 @@ class GUI(QWidget):
         self.csvButton = QPushButton("Generate CSV")
         self.csvButton.clicked.connect(self.csvClicked)
         self.pdfButton = QPushButton("Generate Summary PDF")
+        self.pdfButton.clicked.connect(self.pdfClicked)
         self.quitButton = QPushButton("Quit")
         self.quitButton.clicked.connect(QCoreApplication.instance().quit)
         self.downloadButton = QPushButton("Download and Process")
@@ -120,12 +121,16 @@ class GUI(QWidget):
             self.endText.setEnabled(True)
 
     def downloadClicked(self):
-        start = self.startText.text()
-        end = self.endText.text()
-        code = self.grabber.exams[self.cbox.currentText()]
+        start = int(self.startText.text())
+        end = int(self.endText.text())
+        self.grabber.exam_name = self.cbox.currentText()
+        code = self.grabber.exams[self.grabber.exam_name]
         print "Downloading"
         self.grabber.download(code, start, end)
         print "Completed Downloading"
+        print "Processing"
+        self.grabber.process(start, end)
+        print "\nCompleted Processing"
         self.csvButton.setEnabled(True)
         self.pdfButton.setEnabled(True)
 
@@ -133,11 +138,11 @@ class GUI(QWidget):
         if self.startText.text() != "" and self.endText.text() != "":
             if self.startText.text().isdigit() and \
                     self.endText.text().isdigit():
-                        if len(self.startText.text()) == 8 and \
-                                len(self.endText.text()) == 8:
-                            flag = True
-                        else:
-                            flag = False
+                if len(self.startText.text()) == 8 and \
+                        len(self.endText.text()) == 8:
+                    flag = True
+                else:
+                    flag = False
             else:
                 flag = False
         else:
@@ -152,10 +157,18 @@ class GUI(QWidget):
             self.downloadButton.setEnabled(False)
 
     def csvClicked(self):
-        print "Button Clicked"
+        try:
+            os.mkdir('CSVs')
+        except:
+            pass
+        print "Generating CSVs"
+        self.grabber.tocsv()
+        print "Generated CSVs"
 
     def pdfClicked(self):
-        print "Button Clicked"
+        print "Generating Report"
+        self.grabber.generatepdf()
+        print "Report generated"
 
 
 class ResultGrabber(object):
@@ -218,21 +231,18 @@ class ResultGrabber(object):
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type, fname, exc_tb.tb_lineno)
 
-    def process(start, end):
+    def process(self, start, end):
         '''This method processes the specified results and populate necessary data
         structures.'''
-        global result, exam
-        subjects = []
-        registers = []
-        badresult = []
+        self.badresult = []
+        self.registers = {}
+        self.subjects = {}
         for count in range(start, end + 1):
             try:
-                if verbosity == 1:
-                    print "Roll Number #", count
-                else:
-                    sys.stdout.write(
-                        "\r%.2f%%" % (float(count - start) * 100 / (end - start)))
-                    sys.stdout.flush()
+                sys.stdout.write(
+                    "\r%.2f%%" % (float((count - start) * 100) /
+                                  float(end - start)))
+                sys.stdout.flush()
                 pages = ["1"]
                 f = open("result" + str(count) + ".pdf", "rb")
                 PdfFileReader(f)          # Checking if valid pdf file
@@ -248,15 +258,21 @@ class ResultGrabber(object):
                         namepos = i[0].index('Name : ')
                         registerpos = i[0].index('Register No : ')
                         exampos = i[0].index('Exam Name : ')
-                        college = i[0][collegepos:branchpos][9:].strip().title()
+                        college = i[0][collegepos:branchpos][
+                            9:].strip().title()
                         branch = i[0][branchpos:namepos][9:].strip().title()
                         exam = i[0][exampos:][11:].strip().title()
                         register = i[0][registerpos:exampos][13:].strip()
                         name = i[0][namepos:registerpos][7:].strip()
-                        if college not in result:
-                            result[college] = {}
-                        if branch not in result[college]:
-                            result[college][branch] = {}
+                        if college not in self.result_subject:
+                            self.result_subject[college] = {}
+                            self.result_register[college] = {}
+                            self.registers[college] = {}
+                        if branch not in self.result_subject[college]:
+                            self.result_subject[college][branch] = {}
+                            self.result_register[college][branch] = {}
+                            self.registers[college][branch] = []
+                            self.subjects[branch] = []
                     elif 'Mahatma' in i[0]:
                         pass
                     elif 'Sl. No' in i[0]:
@@ -276,38 +292,46 @@ class ResultGrabber(object):
                         else:
                             external = int(external)
                         res = i[5]
-                        if register not in registers:
-                            registers.append(register)
-                        if subject not in subjects:
-                            subjects.append(subject)
-                        if register not in result[college][branch]:
-                            result[college][branch][register] = {}
-                        result[college][branch][register]["name"] = name
-                        if subject not in result[college][branch][register]:
-                            result[college][branch][register][subject] = {}
-                        result[college][branch][register][subject] = \
+                        if register not in self.registers[college][branch]:
+                            self.registers[college][branch].append(register)
+                        if subject not in self.subjects[branch]:
+                            self.subjects[branch].append(subject)
+                        if register not in self.result_register[college][branch]:
+                            self.result_register[college][
+                                branch][register] = {}
+                        self.result_register[college][
+                            branch][register]["name"] = name
+                        if subject not in self.result_register[college][branch][register]:
+                            self.result_register[college][
+                                branch][register][subject] = {}
+                        self.result_register[college][branch][register][subject] = \
                             [internal, external, internal + external, res]
+
+                        if subject not in self.result_subject[college][branch]:
+                            self.result_subject[college][branch][subject] = {}
+                        self.result_subject[college][branch][subject][register] = \
+                            [external, res]
             except Exception as e:
                 print e
-                badresult.append(count)
+                self.badresult.append(count)
                 continue
-        if(len(badresult) > 0):
+        if(len(self.badresult) > 0):
             print "\nUnavailable Results Skipped"
-            for invalid in badresult:
+            for invalid in self.badresult:
                 print "Roll Number #", invalid
-        jsonout = json.dumps(result, indent=4)
-        outfile = open('output.json', 'w')
+        jsonout = json.dumps(self.result_register, indent=4)
+        outfile = open('output_register.json', 'w')
         outfile.write(jsonout)
         outfile.close()
-        print ""
-        return subjects, registers
+        jsonout2 = json.dumps(self.result_subject, indent=4)
+        outfile2 = open('output_subject.json', 'w')
+        outfile2.write(jsonout2)
+        outfile2.close()
 
-
-    def generatepdf():
-        '''This method generates summary pdf from the results of result processor.
+    def generatepdf(self):
         '''
-        global exam
-
+        This method generates summary pdf from the results of result processor.
+        '''
         doc = SimpleDocTemplate("report.pdf", pagesize=A4,
                                 rightMargin=72, leftMargin=72,
                                 topMargin=50, bottomMargin=30)
@@ -319,36 +343,36 @@ class ResultGrabber(object):
         styles.add(ParagraphStyle(name='Center2', alignment=1, fontSize=13))
         styles.add(ParagraphStyle(name='Normal2', bulletIndent=20))
         styles.add(ParagraphStyle(name='Normal3', fontSize=12))
-        for college in result1:
-            for branch in result1[college]:
+        for college in self.result_subject:
+            for branch in self.result_subject[college]:
                 # PDF Generation begins
                 Story.append(Paragraph(college, styles["Center1"]))
                 Story.append(Spacer(1, 0.25 * inch))
-                Story.append(Paragraph(exam, styles["Center2"]))
+                Story.append(Paragraph(self.exam_name, styles["Center2"]))
                 Story.append(Spacer(1, 12))
                 numberofstudents = len(
-                    result1[college][branch].itervalues().next())
+                    self.result_subject[college][branch].itervalues().next())
                 Story.append(Paragraph(branch, styles["Center2"]))
                 Story.append(Spacer(1, 0.25 * inch))
                 Story.append(Paragraph("Total Number of Students : %d" %
                                        numberofstudents, styles["Normal2"]))
                 Story.append(Spacer(1, 12))
-                for subject in result1[college][branch]:
-                    marklist = [int(result1[college][branch][subject][x][0])
-                                for x in result1[college][branch][subject]]
+                for subject in self.result_subject[college][branch]:
+                    marklist = [int(self.result_subject[college][branch][subject][x][0])
+                                for x in self.result_subject[college][branch][subject]]
                     average = statistics.mean(marklist)  # Calculating mean
                     # Calculating standard deviation
                     stdev = statistics.pstdev(marklist)
-                    passlist = {x for x in result1[college][branch][
-                        subject] if 'P' in result1[college][branch][subject][x]}
-                    faillist = {x for x in result1[college][branch][
-                        subject] if 'F' in result1[college][branch][subject][x]}
-                    absentlist = {x for x in result1[college][branch][
-                        subject] if 'AB' in result1[college][branch][subject][x]}
+                    passlist = {x for x in self.result_subject[college][branch][
+                        subject] if 'P' in self.result_subject[college][branch][subject][x]}
+                    faillist = {x for x in self.result_subject[college][branch][
+                        subject] if 'F' in self.result_subject[college][branch][subject][x]}
+                    absentlist = {x for x in self.result_subject[college][branch][
+                        subject] if 'AB' in self.result_subject[college][branch][subject][x]}
                     passcount = len(passlist)
                     failcount = len(faillist)
                     absentcount = len(absentlist)
-                    percentage = float(passcount) / numberofstudents
+                    percentage = float(passcount) * 100 / numberofstudents
                     subjectname = "<b>%s</b>" % subject
                     passed = "<bullet>&bull;</bullet>Students Passed : %d" \
                         % passcount
@@ -379,7 +403,6 @@ class ResultGrabber(object):
                 Story.append(PageBreak())  # Each department on new page
         doc.build(Story)
 
-
     def getsummary():
         ''' This method generates overall average and standard deviation'''
         infile = open('output.json', 'r')
@@ -405,7 +428,8 @@ class ResultGrabber(object):
                 if subject not in final[department]:
                     final[department][subject] = []
                 if len(result[department][subject]) > 1:
-                    subjectaverage = statistics.mean(result[department][subject])
+                    subjectaverage = statistics.mean(
+                        result[department][subject])
                     subjectdev = statistics.stdev(result[department][subject])
                     final[department][subject].append(subjectaverage)
                     final[department][subject].append(subjectdev)
@@ -420,26 +444,37 @@ class ResultGrabber(object):
                 print "\t\t Standard Deviation : %.2f " \
                     % final[department][subject][1]
 
-
-    def tocsv(subjects, registers):
-        f = open('output.json')
+    def tocsv(self):
+        f = open('output_register.json')
         content = f.read()
-        result = json.loads(content)["Adi Shankara Institute Of Engineering And Technology"][
-            "Computer Science And Engineering"]
-        outputstring = ""
-        for register in registers:
-            details = result[register]
-            outputstring += register
-            name = details["name"]
-            details.pop("name")
-            outputstring += "," + name
-            for subject in subjects:
-                for mark in details[subject]:
-                    outputstring += "," + str(mark)
-            outputstring += "\n"
-        csvout = open('output.csv', 'w')
-        csvout.write(outputstring)
-        csvout.close()
+        jsonout = json.loads(content)
+        for college, branches in jsonout.items():
+            try:
+                college_folder = 'CSVs/' + college.replace(' ', '_')
+                os.mkdir(college_folder)
+            except:
+                pass
+            for branch, result in branches.items():
+                branch_folder = branch.replace(' ', '_')
+                try:
+                    os.mkdir(college_folder + '/' + branch_folder)
+                except:
+                    pass
+                outputstring = ""
+                for register in self.registers[college][branch]:
+                    details = result[register]
+                    outputstring += register
+                    name = details["name"]
+                    details.pop("name")
+                    outputstring += "," + name
+                    for subject in self.subjects[branch]:
+                        for mark in details[subject]:
+                            outputstring += "," + str(mark)
+                    outputstring += "\n"
+                csvout = open(college_folder + '/' +
+                              branch_folder + '/' + 'output.csv', 'w')
+                csvout.write(outputstring)
+                csvout.close()
 
     if __name__ == '__main__':
         # Defining commandline options
