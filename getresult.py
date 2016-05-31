@@ -47,7 +47,6 @@ class GUI(QWidget):
         super(GUI, self).__init__()
         self.grabber = None
         self.initSplash()
-        self.initDirectoryChooser()
         self.initUI()
 
     def initSplash(self):
@@ -74,9 +73,6 @@ class GUI(QWidget):
             else:
                 self.grabber.getexamlist()
         splash.finish(self)
-
-    def initDirectoryChooser(self):
-        pass
 
     def initUI(self):
         '''
@@ -185,6 +181,9 @@ class GUI(QWidget):
         self.pdfButton.setEnabled(True)
 
     def textValidate(self):
+        '''
+        Validate if start and end roll numbers are correct.
+        '''
         if self.startText.text() != "" and self.endText.text() != "":
             if self.startText.text().isdigit() and \
                     self.endText.text().isdigit():
@@ -201,7 +200,7 @@ class GUI(QWidget):
 
     def textChanged(self):
         '''
-        Validate register numbers.
+        Handle text inputs.
         '''
         flag = self.textValidate()
         if flag and self.folderName.text() != "":
@@ -214,6 +213,9 @@ class GUI(QWidget):
             self.downloadButton.setEnabled(False)
 
     def folderClicked(self):
+        '''
+        Handle folder selection.
+        '''
         flag = self.textValidate()
         dialog = QFileDialog(self)
         dialog.setFileMode(QFileDialog.Directory)
