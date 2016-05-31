@@ -47,6 +47,7 @@ class GUI(QWidget):
         super(GUI, self).__init__()
         self.grabber = None
         self.initSplash()
+        self.initDirectoryChooser()
         self.initUI()
 
     def initSplash(self):
@@ -59,7 +60,23 @@ class GUI(QWidget):
         splash.show()
         splash.showMessage("Loading", color=Qt.white)
         self.grabber = ResultGrabber()
+        while not self.grabber.status:
+            mbox = QMessageBox(splash)
+            mbox.setIcon(QMessageBox.Critical)
+            mbox.setText("Error in Connectivity")
+            message = "Check your internet connection. Or, it may be due " + \
+                "to heavy load. Please try again later"
+            mbox.setInformativeText(message)
+            mbox.setStandardButtons(QMessageBox.Ok | QMessageBox.Retry)
+            reply = mbox.exec_()
+            if reply == QMessageBox.Ok:
+                sys.exit(0)
+            else:
+                self.grabber.getexamlist()
         splash.finish(self)
+
+    def initDirectoryChooser(self):
+        pass
 
     def initUI(self):
         '''
@@ -97,17 +114,23 @@ class GUI(QWidget):
         self.endText.setPlaceholderText("Ending Registration Number")
         self.startText.textChanged.connect(self.textChanged)
         self.endText.textChanged.connect(self.textChanged)
+        self.folderName = QLineEdit()
+        self.folderName.setReadOnly(True)
+        self.folderButton = QPushButton("Select Directory")
+        self.folderButton.clicked.connect(self.folderClicked)
         grid = QGridLayout()
         grid.addWidget(self.label1, 0, 0, 1, 3)
         grid.addWidget(self.cbox, 1, 0, 1, 3)
         grid.addWidget(self.startText, 2, 0, 1, 3)
         grid.addWidget(self.endText, 3, 0, 1, 3)
-        grid.addWidget(self.downloadButton, 4, 0, 1, 3)
-        grid.addWidget(self.csvButton, 5, 0)
-        grid.addWidget(self.pdfButton, 5, 1)
-        grid.addWidget(self.quitButton, 5, 2)
+        grid.addWidget(self.folderName, 4, 0, 1, 2)
+        grid.addWidget(self.folderButton, 4, 2, 1, 1)
+        grid.addWidget(self.downloadButton, 5, 0, 1, 3)
+        grid.addWidget(self.csvButton, 6, 0)
+        grid.addWidget(self.pdfButton, 6, 1)
+        grid.addWidget(self.quitButton, 6, 2)
         self.setLayout(grid)
-        self.label1.setFocus(Qt.OtherFocusReason)
+        self.cbox.setFocus(Qt.OtherFocusReason)
         self.csvButton.setEnabled(False)
         self.pdfButton.setEnabled(False)
         self.downloadButton.setEnabled(False)
@@ -130,7 +153,10 @@ class GUI(QWidget):
             self.pdfButton.setEnabled(False)
             self.downloadButton.setEnabled(False)
             self.startText.setEnabled(True)
+            self.startText.setText("")
             self.endText.setEnabled(True)
+            self.endText.setText("")
+            self.folderName.setText("")
 
     def downloadClicked(self):
         '''
@@ -141,18 +167,24 @@ class GUI(QWidget):
         self.grabber.exam_name = self.cbox.currentText()
         code = self.grabber.exams[self.grabber.exam_name]
         print "Downloading"
-        self.grabber.download(code, start, end)
-        print "Completed Downloading"
+        parentfolder = self.folderName.text()
+        self.grabber.download(code, start, end, parentfolder)
         print "Processing"
-        self.grabber.process(start, end)
-        print "\nCompleted Processing"
+        unprocessed = self.grabber.process(start, end, parentfolder)
+        mbox = QMessageBox(self)
+        mbox.setIcon(QMessageBox.Information)
+        mbox.setText("Results Downloaded and Procesed")
+        if len(unprocessed) > 0:
+            unprocessed_text = "\n".join([str(x) for x in unprocessed])
+            message = "Unavailable Results: \n" + unprocessed_text
+            mbox.setInformativeText(message)
+        mbox.setStandardButtons(QMessageBox.Ok)
+        reply = mbox.exec_()
+
         self.csvButton.setEnabled(True)
         self.pdfButton.setEnabled(True)
 
-    def textChanged(self):
-        '''
-        Validate register numbers.
-        '''
+    def textValidate(self):
         if self.startText.text() != "" and self.endText.text() != "":
             if self.startText.text().isdigit() and \
                     self.endText.text().isdigit():
@@ -165,7 +197,14 @@ class GUI(QWidget):
                 flag = False
         else:
             flag = False
-        if flag:
+        return flag
+
+    def textChanged(self):
+        '''
+        Validate register numbers.
+        '''
+        flag = self.textValidate()
+        if flag and self.folderName.text() != "":
             self.downloadButton.setEnabled(True)
             self.csvButton.setEnabled(False)
             self.pdfButton.setEnabled(False)
@@ -174,25 +213,61 @@ class GUI(QWidget):
             self.pdfButton.setEnabled(False)
             self.downloadButton.setEnabled(False)
 
+    def folderClicked(self):
+        flag = self.textValidate()
+        dialog = QFileDialog(self)
+        dialog.setFileMode(QFileDialog.Directory)
+        dialog.setOption(QFileDialog.ShowDirsOnly, True)
+        if dialog.exec_():
+            folder = dialog.selectedFiles()[0]
+            self.folderName.setText(folder)
+            if flag:
+                self.downloadButton.setEnabled(True)
+                self.csvButton.setEnabled(False)
+                self.pdfButton.setEnabled(False)
+
     def csvClicked(self):
         '''
         Handle CSV creation button click.
         '''
+        parentfolder = self.folderName.text()
+        csvfolder = parentfolder + '/CSV/'
         try:
-            os.mkdir('CSVs')
+            os.mkdir(csvfolder)
         except:
             pass
-        print "Generating CSVs"
-        self.grabber.tocsv()
-        print "Generated CSVs"
+        status = self.grabber.tocsv(parentfolder, csvfolder)
+        if status:
+            mbox = QMessageBox(self)
+            mbox.setIcon(QMessageBox.Information)
+            mbox.setText("CSVs Generated")
+            mbox.setStandardButtons(QMessageBox.Ok)
+            reply = mbox.exec_()
+        else:
+            mbox = QMessageBox(self)
+            mbox.setIcon(QMessageBox.Critical)
+            mbox.setText("Failure")
+            mbox.setStandardButtons(QMessageBox.Ok)
+            reply = mbox.exec_()
 
     def pdfClicked(self):
         '''
         Handle PDF creation button click.
         '''
-        print "Generating Report"
-        self.grabber.generatepdf()
-        print "Report generated"
+        parentfolder = self.folderName.text()
+        status = self.grabber.generatepdf(parentfolder)
+        if status:
+            mbox = QMessageBox(self)
+            mbox.setIcon(QMessageBox.Information)
+            mbox.setText("Report Generated")
+            mbox.setStandardButtons(QMessageBox.Ok)
+            reply = mbox.exec_()
+        else:
+            mbox = QMessageBox(self)
+            mbox.setIcon(QMessageBox.Critical)
+            mbox.setText("Failure")
+            mbox.setStandardButtons(QMessageBox.Ok)
+            reply = mbox.exec_()
 
 
 class ResultGrabber(object):
@@ -208,6 +283,7 @@ class ResultGrabber(object):
         self.result_register = {}
         self.url = 'http://projects.mgu.ac.in/bTech/btechresult/index.php?\
                 module=public&attrib=result&page=result'
+        self.status = False
         self.exams = {}
         self.getexamlist()
 
@@ -223,13 +299,11 @@ class ResultGrabber(object):
             text = tree.xpath('//option')
             for i in range(1, len(code)):
                 self.exams[text[i].text.strip()] = str(code[i])
+            self.status = True
         except Exception as e:
-            print e
-            print "There are some issues with the connectivity.",
-            print "May be due to heavy load. Please try again later"
-            sys.exit(0)
+            self.status = False
 
-    def download(self, examcode, start, end):
+    def download(self, examcode, start, end, parentfolder):
         '''
         Downloads the results of register numbers from 'start' to 'end'.
         '''
@@ -237,25 +311,23 @@ class ResultGrabber(object):
         end = int(end)
         verbosity = 1
         try:
-            os.mkdir('Results')
+            result_pdf_path = parentfolder + '/Results/'
+            os.mkdir(result_pdf_path)
         except:
             pass
         try:
             for count in range(start, end + 1):
-                if verbosity == 1:
-                    print "Roll Number #", count
-                else:
-                    sys.stdout.write(
-                        "\r%.2f%%" % (float((count - start) * 100) /
-                                      float(end - start)))
-                    sys.stdout.flush()
                 payload = dict(exam=examcode, prn=count, Submit2='Submit')
                 r = requests.post(self.url, payload)
                 if r.status_code == 200:
-                    with open('Results/result' + str(count) + '.pdf', 'wb') as\
+                    with open(result_pdf_path + 'result' + str(count) + '.pdf', 'wb') as\
                             resultfile:
                         for chunk in r.iter_content():
                             resultfile.write(chunk)
+                sys.stdout.write(
+                    "\r%.2f%%" % (float((count - start) * 100) /
+                                  float(end - start)))
+                sys.stdout.flush()
             print ""
         except Exception as e:
             print e
@@ -265,7 +337,7 @@ class ResultGrabber(object):
             fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
             print(exc_type, fname, exc_tb.tb_lineno)
 
-    def process(self, start, end):
+    def process(self, start, end, parentfolder):
         '''
         This method processes the specified results and populate necessary data
         structures.
@@ -273,17 +345,15 @@ class ResultGrabber(object):
         self.badresult = []
         self.registers = {}
         self.subjects = {}
+        result_pdf_path = parentfolder + "/Results/"
         for count in range(start, end + 1):
             try:
-                sys.stdout.write(
-                    "\r%.2f%%" % (float((count - start) * 100) /
-                                  float(end - start)))
-                sys.stdout.flush()
                 pages = ["1"]
-                f = open("result" + str(count) + ".pdf", "rb")
+                f = open(result_pdf_path + "result" +
+                         str(count) + ".pdf", "rb")
                 PdfFileReader(f)          # Checking if valid pdf file
                 f.close()
-                cells = [pdf.process_page("result" + str(count) + ".pdf", p)
+                cells = [pdf.process_page(result_pdf_path + "result" + str(count) + ".pdf", p)
                          for p in pages]
                 cells = [item for sublist in cells for item in sublist]
                 li = pdf.table_to_list(cells, pages)[1]
@@ -349,97 +419,103 @@ class ResultGrabber(object):
                             self.result_subject[college][branch][subject] = {}
                         self.result_subject[college][branch][subject][register] = \
                             [external, res]
+                sys.stdout.write(
+                    "\r%.2f%%" % (float((count - start) * 100) /
+                                  float(end - start)))
+                sys.stdout.flush()
             except Exception as e:
-                print e
                 self.badresult.append(count)
                 continue
-        if(len(self.badresult) > 0):
-            print "\nUnavailable Results Skipped"
-            for invalid in self.badresult:
-                print "Roll Number #", invalid
         jsonout = json.dumps(self.result_register, indent=4)
-        outfile = open('output_register.json', 'w')
+        outfile = open(parentfolder + '/output_register.json', 'w')
         outfile.write(jsonout)
         outfile.close()
         jsonout2 = json.dumps(self.result_subject, indent=4)
-        outfile2 = open('output_subject.json', 'w')
+        outfile2 = open(parentfolder + '/output_subject.json', 'w')
         outfile2.write(jsonout2)
         outfile2.close()
+        return self.badresult
 
-    def generatepdf(self):
+    def generatepdf(self, parentfolder):
         '''
         This method generates summary pdf from the results of result processor.
         '''
-        doc = SimpleDocTemplate("Report.pdf", pagesize=A4,
-                                rightMargin=72, leftMargin=72,
-                                topMargin=50, bottomMargin=30)
-        Story = []
-        doc.title = "Exam Result Summary"
-        # Defining different text styles to be used in PDF
-        styles = getSampleStyleSheet()
-        styles.add(ParagraphStyle(name='Center1', alignment=1, fontSize=18))
-        styles.add(ParagraphStyle(name='Center2', alignment=1, fontSize=13))
-        styles.add(ParagraphStyle(name='Normal2', bulletIndent=20))
-        styles.add(ParagraphStyle(name='Normal3', fontSize=12))
-        for college in self.result_subject:
-            for branch in self.result_subject[college]:
-                # PDF Generation begins
-                Story.append(Paragraph(college, styles["Center1"]))
-                Story.append(Spacer(1, 0.25 * inch))
-                Story.append(Paragraph(self.exam_name, styles["Center2"]))
-                Story.append(Spacer(1, 12))
-                numberofstudents = len(
-                    self.result_subject[college][branch].itervalues().next())
-                Story.append(Paragraph(branch, styles["Center2"]))
-                Story.append(Spacer(1, 0.25 * inch))
-                Story.append(Paragraph("Total Number of Students : %d" %
-                                       numberofstudents, styles["Normal2"]))
-                Story.append(Spacer(1, 12))
-                for subject in self.result_subject[college][branch]:
-                    marklist = [int(self.result_subject[college][branch][subject][x][0])
-                                for x in self.result_subject[college][branch][subject]]
-                    average = statistics.mean(marklist)  # Calculating mean
-                    # Calculating standard deviation
-                    stdev = statistics.pstdev(marklist)
-                    passlist = {x for x in self.result_subject[college][branch][
-                        subject] if 'P' in self.result_subject[college][branch][subject][x]}
-                    faillist = {x for x in self.result_subject[college][branch][
-                        subject] if 'F' in self.result_subject[college][branch][subject][x]}
-                    absentlist = {x for x in self.result_subject[college][branch][
-                        subject] if 'AB' in self.result_subject[college][branch][subject][x]}
-                    passcount = len(passlist)
-                    failcount = len(faillist)
-                    absentcount = len(absentlist)
-                    percentage = float(passcount) * 100 / numberofstudents
-                    subjectname = "<b>%s</b>" % subject
-                    passed = "<bullet>&bull;</bullet>Students Passed : %d" \
-                        % passcount
-                    failed = " <bullet>&bull;</bullet>Students Failed : %d" \
-                        % failcount
-                    absent = " <bullet>&bull;</bullet>Students Absent : %d" \
-                        % absentcount
-                    percentage = " <bullet>&bull;</bullet>Pass Percentage : %.2f"\
-                        % percentage
-                    average = " <bullet>&bull;</bullet>Average Marks : %.2f" \
-                        % average
-                    stdev = "<bullet>&bull;</bullet>Standard Deviation : %.2f" \
-                        % stdev
-                    Story.append(Paragraph(subjectname, styles["Normal"]))
+        try:
+            doc = SimpleDocTemplate(parentfolder + "/Report.pdf", pagesize=A4,
+                                    rightMargin=72, leftMargin=72,
+                                    topMargin=50, bottomMargin=30)
+            Story = []
+            doc.title = "Exam Result Summary"
+            # Defining different text styles to be used in PDF
+            styles = getSampleStyleSheet()
+            styles.add(ParagraphStyle(
+                name='Center1', alignment=1, fontSize=18))
+            styles.add(ParagraphStyle(
+                name='Center2', alignment=1, fontSize=13))
+            styles.add(ParagraphStyle(name='Normal2', bulletIndent=20))
+            styles.add(ParagraphStyle(name='Normal3', fontSize=12))
+            for college in self.result_subject:
+                for branch in self.result_subject[college]:
+                    # PDF Generation begins
+                    Story.append(Paragraph(college, styles["Center1"]))
+                    Story.append(Spacer(1, 0.25 * inch))
+                    Story.append(Paragraph(self.exam_name, styles["Center2"]))
                     Story.append(Spacer(1, 12))
-                    Story.append(Paragraph(passed, styles["Normal2"]))
+                    numberofstudents = len(
+                        self.result_subject[college][branch].itervalues().next())
+                    Story.append(Paragraph(branch, styles["Center2"]))
+                    Story.append(Spacer(1, 0.25 * inch))
+                    Story.append(Paragraph("Total Number of Students : %d" %
+                                           numberofstudents, styles["Normal2"]))
                     Story.append(Spacer(1, 12))
-                    Story.append(Paragraph(failed, styles["Normal2"]))
-                    Story.append(Spacer(1, 12))
-                    Story.append(Paragraph(absent, styles["Normal2"]))
-                    Story.append(Spacer(1, 12))
-                    Story.append(Paragraph(percentage, styles["Normal2"]))
-                    Story.append(Spacer(1, 12))
-                    Story.append(Paragraph(average, styles["Normal2"]))
-                    Story.append(Spacer(1, 12))
-                    Story.append(Paragraph(stdev, styles["Normal2"]))
-                    Story.append(Spacer(1, 12))
-                Story.append(PageBreak())  # Each department on new page
-        doc.build(Story)
+                    for subject in self.result_subject[college][branch]:
+                        marklist = [int(self.result_subject[college][branch][subject][x][0])
+                                    for x in self.result_subject[college][branch][subject]]
+                        average = statistics.mean(marklist)  # Calculating mean
+                        # Calculating standard deviation
+                        stdev = statistics.pstdev(marklist)
+                        passlist = {x for x in self.result_subject[college][branch][
+                            subject] if 'P' in self.result_subject[college][branch][subject][x]}
+                        faillist = {x for x in self.result_subject[college][branch][
+                            subject] if 'F' in self.result_subject[college][branch][subject][x]}
+                        absentlist = {x for x in self.result_subject[college][branch][
+                            subject] if 'AB' in self.result_subject[college][branch][subject][x]}
+                        passcount = len(passlist)
+                        failcount = len(faillist)
+                        absentcount = len(absentlist)
+                        percentage = float(passcount) * 100 / numberofstudents
+                        subjectname = "<b>%s</b>" % subject
+                        passed = "<bullet>&bull;</bullet>Students Passed : %d" \
+                            % passcount
+                        failed = " <bullet>&bull;</bullet>Students Failed : %d" \
+                            % failcount
+                        absent = " <bullet>&bull;</bullet>Students Absent : %d" \
+                            % absentcount
+                        percentage = " <bullet>&bull;</bullet>Pass Percentage : %.2f"\
+                            % percentage
+                        average = " <bullet>&bull;</bullet>Average Marks : %.2f" \
+                            % average
+                        stdev = "<bullet>&bull;</bullet>Standard Deviation : %.2f" \
+                            % stdev
+                        Story.append(Paragraph(subjectname, styles["Normal"]))
+                        Story.append(Spacer(1, 12))
+                        Story.append(Paragraph(passed, styles["Normal2"]))
+                        Story.append(Spacer(1, 12))
+                        Story.append(Paragraph(failed, styles["Normal2"]))
+                        Story.append(Spacer(1, 12))
+                        Story.append(Paragraph(absent, styles["Normal2"]))
+                        Story.append(Spacer(1, 12))
+                        Story.append(Paragraph(percentage, styles["Normal2"]))
+                        Story.append(Spacer(1, 12))
+                        Story.append(Paragraph(average, styles["Normal2"]))
+                        Story.append(Spacer(1, 12))
+                        Story.append(Paragraph(stdev, styles["Normal2"]))
+                        Story.append(Spacer(1, 12))
+                    Story.append(PageBreak())  # Each department on new page
+            doc.build(Story)
+            return True
+        except:
+            return False
 
     def getsummary():
         '''
@@ -485,40 +561,35 @@ class ResultGrabber(object):
                 print "\t\t Standard Deviation : %.2f " \
                     % final[department][subject][1]
 
-    def tocsv(self):
+    def tocsv(self, parentfolder, csvfolder):
         '''
         Generate CSV files for each branch in each college.
         '''
-        f = open('output_register.json')
-        content = f.read()
-        jsonout = json.loads(content)
-        for college, branches in jsonout.items():
-            try:
-                college_folder = 'CSVs/' + college.replace(' ', '_')
-                os.mkdir(college_folder)
-            except:
-                pass
-            for branch, result in branches.items():
-                branch_folder = branch.replace(' ', '_')
-                try:
-                    os.mkdir(college_folder + '/' + branch_folder)
-                except:
-                    pass
-                outputstring = ""
-                for register in self.registers[college][branch]:
-                    details = result[register]
-                    outputstring += register
-                    name = details["name"]
-                    details.pop("name")
-                    outputstring += "," + name
-                    for subject in self.subjects[branch]:
-                        for mark in details[subject]:
-                            outputstring += "," + str(mark)
-                    outputstring += "\n"
-                csvout = open(college_folder + '/' +
-                              branch_folder + '/' + 'output.csv', 'w')
-                csvout.write(outputstring)
-                csvout.close()
+        try:
+            f = open(parentfolder + '/output_register.json')
+            content = f.read()
+            jsonout = json.loads(content)
+            for college, branches in jsonout.items():
+                for branch, result in branches.items():
+                    outputstring = ""
+                    for register in self.registers[college][branch]:
+                        details = result[register]
+                        outputstring += register
+                        name = details["name"]
+                        details.pop("name")
+                        outputstring += "," + name
+                        for subject in self.subjects[branch]:
+                            for mark in details[subject]:
+                                outputstring += "," + str(mark)
+                        outputstring += "\n"
+                    filename = (college + '_' +
+                                branch).replace(' ', '_') + '.csv'
+                    csvout = open(csvfolder + filename, 'w')
+                    csvout.write(outputstring)
+                    csvout.close()
+            return True
+        except:
+            return False
 
 
 def main():
