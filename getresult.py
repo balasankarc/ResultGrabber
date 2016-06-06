@@ -35,7 +35,8 @@ from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer
 import pdftableextract as pdf
 
 
-class GUI(QWidget):
+class GUI(QMainWindow):
+    # QWidget):
     '''
     Class to generate GUI for ResultGrabber.
     '''
@@ -80,6 +81,7 @@ class GUI(QWidget):
         '''
         self.setGeometry(0, 0, 300, 300)
         self.setWindowTitle('ResultGrabber')
+        self.widget = QWidget(self)
 
         self.label1 = QLabel("ResultGrabber")
         font = QFont("FreeMono", 20)
@@ -92,17 +94,7 @@ class GUI(QWidget):
         self.cbox.addItem("Select Examination")
         for exam in self.grabber.exams:
             self.cbox.addItem(exam)
-
         self.cbox.currentIndexChanged.connect(self.comboClicked)
-
-        self.csvButton = QPushButton("Generate CSV")
-        self.csvButton.clicked.connect(self.csvClicked)
-        self.pdfButton = QPushButton("Generate Summary PDF")
-        self.pdfButton.clicked.connect(self.pdfClicked)
-        self.quitButton = QPushButton("Quit")
-        self.quitButton.clicked.connect(QCoreApplication.instance().quit)
-        self.downloadButton = QPushButton("Download and Process")
-        self.downloadButton.clicked.connect(self.downloadClicked)
 
         self.startText = QLineEdit()
         self.startText.setPlaceholderText("Starting Registration Number")
@@ -114,6 +106,15 @@ class GUI(QWidget):
         self.folderName.setReadOnly(True)
         self.folderButton = QPushButton("Select Directory")
         self.folderButton.clicked.connect(self.folderClicked)
+
+        self.csvButton = QPushButton("Generate CSV")
+        self.csvButton.clicked.connect(self.csvClicked)
+        self.pdfButton = QPushButton("Generate Summary PDF")
+        self.pdfButton.clicked.connect(self.pdfClicked)
+        self.quitButton = QPushButton("Quit")
+        self.quitButton.clicked.connect(QCoreApplication.instance().quit)
+        self.downloadButton = QPushButton("Download and Process")
+        self.downloadButton.clicked.connect(self.downloadClicked)
         grid = QGridLayout()
         grid.addWidget(self.label1, 0, 0, 1, 3)
         grid.addWidget(self.cbox, 1, 0, 1, 3)
@@ -132,6 +133,12 @@ class GUI(QWidget):
         self.downloadButton.setEnabled(False)
         self.startText.setEnabled(False)
         self.endText.setEnabled(False)
+
+        layout = QFormLayout()
+        self.widget.setLayout(grid)
+        self.setCentralWidget(self.widget)
+        self.setLayout(layout)
+
         self.show()
 
     def comboClicked(self):
@@ -232,8 +239,8 @@ class GUI(QWidget):
         '''
         Handle CSV creation button click.
         '''
-        parentfolder = self.folderName.text()
-        csvfolder = parentfolder + '/CSV/'
+        parentfolder = os.path.abspath(self.folderName.text())
+        csvfolder = os.path.join(parentfolder, 'CSV')
         try:
             os.mkdir(csvfolder)
         except:
@@ -256,7 +263,7 @@ class GUI(QWidget):
         '''
         Handle PDF creation button click.
         '''
-        parentfolder = self.folderName.text()
+        parentfolder = os.path.abspath(self.folderName.text())
         status = self.grabber.generatepdf(parentfolder)
         if status:
             mbox = QMessageBox(self)
@@ -347,15 +354,16 @@ class ResultGrabber(object):
         self.badresult = []
         self.registers = {}
         self.subjects = {}
-        result_pdf_path = parentfolder + "/Results/"
+        result_pdf_path = os.path.join(parentfolder, 'Results')
         for count in range(start, end + 1):
             try:
                 pages = ["1"]
-                f = open(result_pdf_path + "result" +
-                         str(count) + ".pdf", "rb")
+                filename = "result" + str(count) + ".pdf"
+                filepath = os.path.join(result_pdf_path, filename)
+                f = open(filepath, "rb")
                 PdfFileReader(f)          # Checking if valid pdf file
                 f.close()
-                cells = [pdf.process_page(result_pdf_path + "result" + str(count) + ".pdf", p)
+                cells = [pdf.process_page(filepath, p)
                          for p in pages]
                 cells = [item for sublist in cells for item in sublist]
                 li = pdf.table_to_list(cells, pages)[1]
@@ -429,11 +437,13 @@ class ResultGrabber(object):
                 self.badresult.append(count)
                 continue
         jsonout = json.dumps(self.result_register, indent=4)
-        outfile = open(parentfolder + '/output_register.json', 'w')
+        json1path = os.path.join(parentfolder, 'output_register.json')
+        outfile = open(json1path, 'w')
         outfile.write(jsonout)
         outfile.close()
         jsonout2 = json.dumps(self.result_subject, indent=4)
-        outfile2 = open(parentfolder + '/output_subject.json', 'w')
+        json2path = os.path.join(parentfolder, 'output_subject.json')
+        outfile2 = open(json2path, 'w')
         outfile2.write(jsonout2)
         outfile2.close()
         return self.badresult
@@ -443,7 +453,8 @@ class ResultGrabber(object):
         This method generates summary pdf from the results of result processor.
         '''
         try:
-            doc = SimpleDocTemplate(parentfolder + "/Report.pdf", pagesize=A4,
+            docfile = os.path.join(parentfolder, "Report.pdf")
+            doc = SimpleDocTemplate(docfile, pagesize=A4,
                                     rightMargin=72, leftMargin=72,
                                     topMargin=50, bottomMargin=30)
             Story = []
@@ -524,6 +535,7 @@ class ResultGrabber(object):
         This method generates overall average and standard deviation for each
         department in each college.
         '''
+        filename = os
         infile = open('output.json', 'r')
         filecontent = infile.read()
         infile.close()
@@ -568,7 +580,8 @@ class ResultGrabber(object):
         Generate CSV files for each branch in each college.
         '''
         try:
-            f = open(parentfolder + '/output_register.json')
+            filename = os.path.join(parentfolder, 'output_register.json')
+            f = open(filename)
             content = f.read()
             jsonout = json.loads(content)
             for college, branches in jsonout.items():
@@ -586,7 +599,7 @@ class ResultGrabber(object):
                         outputstring += "\n"
                     filename = (college + '_' +
                                 branch).replace(' ', '_') + '.csv'
-                    csvout = open(csvfolder + filename, 'w')
+                    csvout = open(os.path.join(csvfolder, filename), 'w')
                     csvout.write(outputstring)
                     csvout.close()
             return True
