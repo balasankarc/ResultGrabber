@@ -59,7 +59,7 @@ class GUI(QMainWindow):
         splash.setMask(splash_pix.mask())
         splash.show()
         splash.showMessage("Loading", color=Qt.white)
-        self.grabber = ResultGrabber()
+        self.grabber = ResultGrabber(self)
         while not self.grabber.status:
             mbox = QMessageBox(splash)
             mbox.setIcon(QMessageBox.Critical)
@@ -115,6 +115,9 @@ class GUI(QMainWindow):
         self.quitButton.clicked.connect(QCoreApplication.instance().quit)
         self.downloadButton = QPushButton("Download and Process")
         self.downloadButton.clicked.connect(self.downloadClicked)
+        self.progressbar = QProgressBar()
+        self.progressbar.setMaximum(100)
+        self.progressbar.setMinimum(0)
         grid = QGridLayout()
         grid.addWidget(self.label1, 0, 0, 1, 3)
         grid.addWidget(self.cbox, 1, 0, 1, 3)
@@ -126,6 +129,7 @@ class GUI(QMainWindow):
         grid.addWidget(self.csvButton, 6, 0)
         grid.addWidget(self.pdfButton, 6, 1)
         grid.addWidget(self.quitButton, 6, 2)
+        grid.addWidget(self.progressbar, 7, 0, 1, 3)
         self.setLayout(grid)
         self.cbox.setFocus(Qt.OtherFocusReason)
         self.csvButton.setEnabled(False)
@@ -165,14 +169,13 @@ class GUI(QMainWindow):
         '''
         Handle clicking of download button.
         '''
+        self.progressbar.setValue(0)
         start = int(self.startText.text())
         end = int(self.endText.text())
         self.grabber.exam_name = self.cbox.currentText()
         code = self.grabber.exams[self.grabber.exam_name]
-        print "Downloading"
         parentfolder = self.folderName.text()
         self.grabber.download(code, start, end, parentfolder)
-        print "Processing"
         unprocessed = self.grabber.process(start, end, parentfolder)
         mbox = QMessageBox(self)
         mbox.setIcon(QMessageBox.Information)
@@ -284,10 +287,11 @@ class ResultGrabber(object):
     ResultGrabber class.
     '''
 
-    def __init__(self):
+    def __init__(self, parent=None):
         '''
         Initialize necessary metadata.
         '''
+        self.parent = parent
         self.result_subject = {}
         self.result_register = {}
         self.url = 'http://projects.mgu.ac.in/bTech/btechresult/index.php?\
@@ -333,11 +337,11 @@ class ResultGrabber(object):
                             resultfile:
                         for chunk in r.iter_content():
                             resultfile.write(chunk)
-                sys.stdout.write(
-                    "\r%.2f%%" % (float((count - start) * 100) /
-                                  float(end - start)))
-                sys.stdout.flush()
-            print ""
+                current = self.parent.progressbar.value()
+                if current == -1:
+                    current = 0
+                unit = 50.0 / float(end - start)
+                self.parent.progressbar.setValue(current + unit)
         except Exception as e:
             print e
             print "There are some issues with the connectivity.",
@@ -429,10 +433,10 @@ class ResultGrabber(object):
                             self.result_subject[college][branch][subject] = {}
                         self.result_subject[college][branch][subject][register] = \
                             [external, res]
-                sys.stdout.write(
-                    "\r%.2f%%" % (float((count - start) * 100) /
-                                  float(end - start)))
-                sys.stdout.flush()
+                current = self.parent.progressbar.value()
+                unit = 50.0 / float(end - start)
+                self.parent.progressbar.setValue(current + unit)
+
             except Exception as e:
                 self.badresult.append(count)
                 continue
