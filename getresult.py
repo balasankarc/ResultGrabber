@@ -90,6 +90,9 @@ class GUI(QMainWindow):
         self.label1.setMaximumHeight(50)
         self.label1.setAlignment(Qt.AlignCenter)
 
+        self.label_download = QLabel("Download Status")
+        self.label_process = QLabel("Process Status")
+
         self.cbox = QComboBox()
         self.cbox.addItem("Select Examination")
         for exam in self.grabber.exams:
@@ -118,6 +121,13 @@ class GUI(QMainWindow):
         self.progressbar = QProgressBar()
         self.progressbar.setMaximum(100)
         self.progressbar.setMinimum(0)
+        self.progressbar._text = 'Download Status'
+
+        self.progressbar2 = QProgressBar()
+        self.progressbar2.setMaximum(100)
+        self.progressbar2.setMinimum(0)
+        self.progressbar2._text = 'Processing Status'
+
         grid = QGridLayout()
         grid.addWidget(self.label1, 0, 0, 1, 3)
         grid.addWidget(self.cbox, 1, 0, 1, 3)
@@ -129,7 +139,10 @@ class GUI(QMainWindow):
         grid.addWidget(self.csvButton, 6, 0)
         grid.addWidget(self.pdfButton, 6, 1)
         grid.addWidget(self.quitButton, 6, 2)
-        grid.addWidget(self.progressbar, 7, 0, 1, 3)
+        grid.addWidget(self.label_download, 7, 0, 1, 1)
+        grid.addWidget(self.progressbar, 7, 1, 1, 2)
+        grid.addWidget(self.label_process, 8, 0, 1, 1)
+        grid.addWidget(self.progressbar2, 8, 1, 1, 2)
         self.setLayout(grid)
         self.cbox.setFocus(Qt.OtherFocusReason)
         self.csvButton.setEnabled(False)
@@ -170,6 +183,7 @@ class GUI(QMainWindow):
         Handle clicking of download button.
         '''
         self.progressbar.setValue(0)
+        self.progressbar2.setValue(0)
         start = int(self.startText.text())
         end = int(self.endText.text())
         self.grabber.exam_name = self.cbox.currentText()
@@ -340,7 +354,7 @@ class ResultGrabber(object):
                 current = self.parent.progressbar.value()
                 if current == -1:
                     current = 0
-                unit = 50.0 / float(end - start)
+                unit = 100.0 / float(end - start)
                 self.parent.progressbar.setValue(current + unit)
         except Exception as e:
             print e
@@ -433,10 +447,11 @@ class ResultGrabber(object):
                             self.result_subject[college][branch][subject] = {}
                         self.result_subject[college][branch][subject][register] = \
                             [external, res]
-                current = self.parent.progressbar.value()
-                unit = 50.0 / float(end - start)
-                self.parent.progressbar.setValue(current + unit)
-
+                current = self.parent.progressbar2.value()
+                unit = 100.0 / float(end - start)
+                if current == -1:
+                    current = 0
+                self.parent.progressbar2.setValue(current + unit)
             except Exception as e:
                 self.badresult.append(count)
                 continue
