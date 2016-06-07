@@ -356,6 +356,7 @@ class ResultGrabber(object):
                     current = 0
                 unit = 100.0 / float(end - start)
                 self.parent.progressbar.setValue(current + unit)
+            self.parent.progressbar.setValue(100)
         except Exception as e:
             print e
             print "There are some issues with the connectivity.",
@@ -400,12 +401,17 @@ class ResultGrabber(object):
                         name = i[0][namepos:registerpos][7:].strip()
                         if college not in self.result_subject:
                             self.result_subject[college] = {}
+                        if college not in self.result_register:
                             self.result_register[college] = {}
+                        if college not in self.registers:
                             self.registers[college] = {}
                         if branch not in self.result_subject[college]:
                             self.result_subject[college][branch] = {}
+                        if branch not in self.result_register[college]:
                             self.result_register[college][branch] = {}
+                        if branch not in self.registers[college]:
                             self.registers[college][branch] = []
+                        if branch not in self.subjects:
                             self.subjects[branch] = []
                     elif 'Mahatma' in i[0]:
                         pass
@@ -455,6 +461,7 @@ class ResultGrabber(object):
             except Exception as e:
                 self.badresult.append(count)
                 continue
+        self.parent.progressbar2.setValue(100)
         jsonout = json.dumps(self.result_register, indent=4)
         json1path = os.path.join(parentfolder, 'output_register.json')
         outfile = open(json1path, 'w')
